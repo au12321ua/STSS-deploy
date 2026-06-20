@@ -1,0 +1,42 @@
+# docker-compose.override.yml — Local development overrides
+#
+# Copy this to docker-compose.override.yml to build backend images
+# from local source repositories instead of pulling from GHCR.
+#
+# Prerequisites:
+#   The backend source repositories must exist in sibling directories.
+#   By default the paths assume the group1-base layout:
+#     ../group1-base/auth_service/Dockerfile
+#     ../group1-base/info_service/Dockerfile
+#     ../group1-base/scripts/Dockerfile (seed)
+#
+# Usage:
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#   docker compose build auth_service info_service seed
+#   docker compose up -d
+#   docker compose --profile seed up seed
+#
+# To switch back to GHCR images, remove the override file:
+#   rm docker-compose.override.yml
+#   docker compose up -d
+#
+# Note: The gateway image is always pulled from GHCR unless you
+# override GATEWAY_IMAGE in .env.  To build the gateway locally,
+# clone https://github.com/au12321ua/STSS-gateway and run
+# docker build there.
+
+services:
+  auth_service:
+    build:
+      context: ../group1-base
+      dockerfile: auth_service/Dockerfile
+
+  info_service:
+    build:
+      context: ../group1-base
+      dockerfile: info_service/Dockerfile
+
+  seed:
+    build:
+      context: ../group1-base
+      dockerfile: scripts/Dockerfile

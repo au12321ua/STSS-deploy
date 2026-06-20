@@ -1,0 +1,257 @@
+# ═══════════════════════════════════════════════════════════════════
+# STSS Deploy — Docker Compose
+#
+# Orchestrates the Nginx gateway, Auth Service, Info Service,
+# business services (schedule / course-selection / forum /
+# online-test / grade), a one-shot seed service, and placeholder
+# stubs for services not yet implemented.
+#
+# Gateway image is pulled from GitHub Container Registry (GHCR).
+# The gateway is built and published from a separate repository:
+#   https://github.com/au12321ua/STSS-gateway
+#
+# Usage:
+#   docker compose up -d                   # start everything
+#   docker compose --profile seed up seed  # one-time data seeding
+#   docker compose logs -f gateway         # tail gateway logs
+#   docker compose --profile dev up        # include SPA dev server
+#   docker compose --profile backend-placeholders up -d  # stub services
+# ═══════════════════════════════════════════════════════════════════
+services:
+  # ── Gateway ────────────────────────────────────────────────────
+  gateway:
+    image: ${GATEWAY_IMAGE:-ghcr.io/au12321ua/stss-gateway:latest}
+    container_name: stss-gateway
+    ports:
+      - "${GATEWAY_PORT:-8000}:${GATEWAY_PORT:-8000}"
+    environment:
+      AUTH_SERVICE_URL:      "${AUTH_SERVICE_URL:-auth_service:8001}"
+      INFO_SERVICE_URL:      "${INFO_SERVICE_URL:-info_service:8002}"
+      SCHEDULE_SERVICE_URL:  "${SCHEDULE_SERVICE_URL:-schedule_service:8003}"
+      COURSE_SELECTION_SERVICE_URL: "${COURSE_SELECTION_SERVICE_URL:-course-selection-api:8004}"
+      FORUM_SERVICE_URL:     "${FORUM_SERVICE_URL:-forum_service:8005}"
+      ONLINE_TEST_SERVICE_URL: "${ONLINE_TEST_SERVICE_URL:-online_test_service:8006}"
+      GRADE_SERVICE_URL:     "${GRADE_SERVICE_URL:-grade_service:8007}"
+      GATEWAY_PORT:          "${GATEWAY_PORT:-8000}"
+      CORS_ORIGINS:          "${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000}"
+      RATE_LIMIT_LOGIN:      "${RATE_LIMIT_LOGIN:-10r/m}"
+      GATEWAY_CLIENT_ID:     "${GATEWAY_CLIENT_ID:-gateway}"
+      GATEWAY_CLIENT_SECRET: "${GATEWAY_CLIENT_SECRET:-change-me-gateway-secret}"
+    depends_on:
+      auth_service:
+        condition: service_healthy
+      info_service:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - stss-net
+    healthcheck:
+      test:     ["CMD-SHELL", "curl -fsS http://localhost:$${GATEWAY_PORT:-8000}/api/v1/health || exit 1"]
+      interval: 30s
+      timeout:  5s
+      retries:  3
+      start_period: 10s
+
+  # ── Auth Service ───────────────────────────────────────────────
+  auth_service:
+    image: ${AUTH_SERVICE_IMAGE:-ghcr.io/au12321ua/stss-auth:latest}
+    container_name: stss-auth
+    ports:
+      - "8001:8001"
+    environment:
+      # Runtime
+      ENV:              "${ENV:-development}"
+      LOG_LEVEL:        "${LOG_LEVEL:-DEBUG}"
+
+      # JWT — shared secret, must match across auth & info services
+      TOKEN_SECRET_KEY: "${TOKEN_SECRET_KEY:-change-me-in-production}"
+
+      # Databases (SQLite on named volumes)
+      AUTH_DATABASE_URL:  "sqlite+aiosqlite:///./data/auth.db"
+      AUDIT_DATABASE_URL: "sqlite+aiosqlite:////app/data/audit.db"
+
+      # Gateway service client — MUST match GATEWAY_CLIENT_* vars above
+      SERVICE_CLIENT_GATEWAY_ID:       "${GATEWAY_CLIENT_ID:-gateway}"
+      SERVICE_CLIENT_GATEWAY_SECRET:   "${GATEWAY_CLIENT_SECRET:-change-me-gateway-secret}"
+      SERVICE_CLIENT_GATEWAY_SCOPE:    "internal:verify"
+      SERVICE_CLIENT_GATEWAY_AUDIENCE: "gateway"
+
+      # Info Service client — credentials that Info Service uses to call /auth/sys/login
+      SERVICE_CLIENT_INFO_SERVICE_ID:       "info_service"
+      SERVICE_CLIENT_INFO_SERVICE_SECRET:   "${INFO_SERVICE_CLIENT_SECRET:-change-me-service-secret}"
+      SERVICE_CLIENT_INFO_SERVICE_SCOPE:    "user:read course:read calendar:read"
+      SERVICE_CLIENT_INFO_SERVICE_AUDIENCE: "info_service"
+    volumes:
+      - auth_data:/app/auth_service/data
+      - audit_data:/app/data
+    restart: unless-stopped
+    networks:
+      - stss-net
+    healthcheck:
+      test:     ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/api/v1/health')"]
+      interval: 15s
+      timeout:  3s
+      retries:  5
+      start_period: 10s
+
+  # ── Info Service ───────────────────────────────────────────────
+  info_service:
+    image: ${INFO_SERVICE_IMAGE:-ghcr.io/au12321ua/stss-info:latest}
+    container_name: stss-info
+    ports:
+      - "8002:8002"
+    environment:
+      # Runtime
+      ENV:              "${ENV:-development}"
+      LOG_LEVEL:        "${LOG_LEVEL:-DEBUG}"
+
+      # JWT — shared secret, must match auth_service
+      TOKEN_SECRET_KEY: "${TOKEN_SECRET_KEY:-change-me-in-production}"
+
+      # Databases (SQLite on named volumes)
+      INFO_DATABASE_URL:  "sqlite+aiosqlite:///./data/info.db"
+      AUDIT_DATABASE_URL: "sqlite+aiosqlite:////app/data/audit.db"
+
+      # Auth Service — cross-service calls (Docker internal hostname)
+      AUTH_SERVICE_URL:    "http://auth_service:8001"
+      AUTH_SERVICE_TIMEOUT: "10"
+
+      # Info Service's own credentials for calling /auth/sys/login
+      AUTH_SERVICE_CLIENT_ID:     "info_service"
+      AUTH_SERVICE_CLIENT_SECRET: "${INFO_SERVICE_CLIENT_SECRET:-change-me-service-secret}"
+
+      # File uploads (on named volume)
+      UPLOAD_DIR:           "/app/info_service/uploads"
+      MAX_UPLOAD_SIZE_MB:   "10"
+      ALLOWED_UPLOAD_TYPES: "jpg,jpeg,png,pdf,csv"
+    volumes:
+      - info_data:/app/info_service/data
+      - uploads:/app/info_service/uploads
+      - audit_data:/app/data
+    restart: unless-stopped
+    networks:
+      - stss-net
+    depends_on:
+      auth_service:
+        condition: service_healthy
+    healthcheck:
+      test:     ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/api/v1/info/health')"]
+      interval: 15s
+      timeout:  3s
+      retries:  5
+      start_period: 10s
+
+  # ── Seed — one-shot data initializer ───────────────────────────
+  # Runs once to populate roles, permissions, and default admin user.
+  # Idempotent — safe to re-run on existing volumes.
+  # Usage: docker compose --profile seed up seed
+  seed:
+    image: ${SEED_IMAGE:-ghcr.io/au12321ua/stss-seed:latest}
+    container_name: stss-seed
+    profiles: ["seed"]
+    environment:
+      TOKEN_SECRET_KEY:  "${TOKEN_SECRET_KEY:-change-me-in-production}"
+      AUTH_DATABASE_URL: "sqlite+aiosqlite:////app/auth_service/data/auth.db"
+      INFO_DATABASE_URL: "sqlite+aiosqlite:////app/info_service/data/info.db"
+      AUDIT_DATABASE_URL: "sqlite+aiosqlite:////app/data/audit.db"
+      AUTH_SERVICE_URL:  "http://auth_service:8001"
+    volumes:
+      - auth_data:/app/auth_service/data
+      - info_data:/app/info_service/data
+      - audit_data:/app/data
+    depends_on:
+      auth_service:
+        condition: service_healthy
+      info_service:
+        condition: service_healthy
+    networks:
+      - stss-net
+
+  # ── SPA Front-end (optional, dev profile) ──────────────────────
+  frontend-dev:
+    image: node:22-alpine
+    container_name: stss-frontend-dev
+    profiles: ["dev"]
+    working_dir: /app
+    command: npx vite --host 0.0.0.0 --port 5173
+    ports:
+      - "5173:5173"
+    volumes:
+      - ${FRONTEND_PATH:-./frontend}:/app
+    networks:
+      - stss-net
+
+  # ═══════════════════════════════════════════════════════════════
+  # BUSINESS SERVICE PLACEHOLDERS
+  #
+  # Alpine-based stubs that keep a hostname alive on stss-net so
+  # the gateway's DNS resolver can resolve every upstream at
+  # startup.  Replace each placeholder with the real service
+  # definition when that backend is ready.
+  #
+  # Profile: backend-placeholders
+  #   docker compose --profile backend-placeholders up -d
+  #
+  # The placeholder services expose their port to the Docker
+  # network only — they are NOT published to the host.
+  # ═══════════════════════════════════════════════════════════════
+
+  schedule_service:
+    image: alpine:3.20
+    container_name: stss-schedule-placeholder
+    profiles: ["backend-placeholders"]
+    command: ["sh", "-c", "echo 'schedule_service placeholder — replace with real backend'; sleep infinity"]
+    expose:
+      - "8003"
+    networks:
+      - stss-net
+
+  course-selection-api:
+    image: alpine:3.20
+    container_name: stss-course-selection-placeholder
+    profiles: ["backend-placeholders"]
+    command: ["sh", "-c", "echo 'course-selection-api placeholder — replace with real backend'; sleep infinity"]
+    expose:
+      - "8004"
+    networks:
+      - stss-net
+
+  forum_service:
+    image: alpine:3.20
+    container_name: stss-forum-placeholder
+    profiles: ["backend-placeholders"]
+    command: ["sh", "-c", "echo 'forum_service placeholder — replace with real backend'; sleep infinity"]
+    expose:
+      - "8005"
+    networks:
+      - stss-net
+
+  online_test_service:
+    image: alpine:3.20
+    container_name: stss-online-test-placeholder
+    profiles: ["backend-placeholders"]
+    command: ["sh", "-c", "echo 'online_test_service placeholder — replace with real backend'; sleep infinity"]
+    expose:
+      - "8006"
+    networks:
+      - stss-net
+
+  grade_service:
+    image: alpine:3.20
+    container_name: stss-grade-placeholder
+    profiles: ["backend-placeholders"]
+    command: ["sh", "-c", "echo 'grade_service placeholder — replace with real backend'; sleep infinity"]
+    expose:
+      - "8007"
+    networks:
+      - stss-net
+
+networks:
+  stss-net:
+    driver: bridge
+
+volumes:
+  auth_data:
+  info_data:
+  uploads:
+  audit_data:
