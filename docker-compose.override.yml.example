@@ -5,16 +5,21 @@
 #
 # Prerequisites:
 #   The backend source repositories must exist in sibling directories.
-#   By default the paths assume the group1-base layout:
+#   By default the paths assume this layout:
 #     ../group1-base/auth_service/Dockerfile
 #     ../group1-base/info_service/Dockerfile
 #     ../group1-base/scripts/Dockerfile (seed)
+#     ../schedule/Dockerfile
 #
 # Usage:
 #   cp docker-compose.override.yml.example docker-compose.override.yml
-#   docker compose build auth_service info_service seed
+#   docker compose build auth_service info_service seed schedule_service schedule_worker schedule_seed
 #   docker compose up -d
-#   docker compose --profile seed up seed
+#   docker compose --profile seed up seed schedule_seed
+#
+# This override also publishes Schedule API/MySQL/Redis to the
+# host for local debugging. Main deployment keeps them internal to
+# the Docker network; only the gateway is exposed by default.
 #
 # To switch back to GHCR images, remove the override file:
 #   rm docker-compose.override.yml
@@ -40,3 +45,25 @@ services:
     build:
       context: ../group1-base
       dockerfile: scripts/Dockerfile
+
+  schedule_seed:
+    build:
+      context: ../schedule
+
+  schedule_service:
+    build:
+      context: ../schedule
+    ports:
+      - "${SCHEDULE_API_PORT:-8003}:8003"
+
+  schedule_worker:
+    build:
+      context: ../schedule
+
+  schedule_mysql:
+    ports:
+      - "${SCHEDULE_MYSQL_PORT:-3309}:3306"
+
+  schedule_redis:
+    ports:
+      - "${SCHEDULE_REDIS_PORT:-6382}:6379"

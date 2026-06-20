@@ -12,7 +12,7 @@
 #
 # Usage:
 #   docker compose up -d                   # start everything
-#   docker compose --profile seed up seed  # one-time data seeding
+#   docker compose --profile seed up seed schedule_seed  # one-time data seeding
 #   docker compose logs -f gateway         # tail gateway logs
 #   docker compose --profile dev up        # include SPA dev server
 #   docker compose --profile backend-placeholders up -d  # stub services
@@ -41,6 +41,8 @@ services:
       auth_service:
         condition: service_healthy
       info_service:
+        condition: service_healthy
+      schedule_service:
         condition: service_healthy
     restart: unless-stopped
     networks:
@@ -81,6 +83,12 @@ services:
       SERVICE_CLIENT_INFO_SERVICE_SECRET:   "${INFO_SERVICE_CLIENT_SECRET:-change-me-service-secret}"
       SERVICE_CLIENT_INFO_SERVICE_SCOPE:    "user:read course:read calendar:read"
       SERVICE_CLIENT_INFO_SERVICE_AUDIENCE: "info_service"
+
+      # Schedule Service client — worker calls Info through Gateway with this service token
+      SERVICE_CLIENT_SCHEDULE_SERVICE_ID:       "${SCHEDULE_SERVICE_CLIENT_ID:-schedule_service}"
+      SERVICE_CLIENT_SCHEDULE_SERVICE_SECRET:   "${SCHEDULE_SERVICE_CLIENT_SECRET:-change-me-schedule-service-secret}"
+      SERVICE_CLIENT_SCHEDULE_SERVICE_SCOPE:    "offering:read course:read"
+      SERVICE_CLIENT_SCHEDULE_SERVICE_AUDIENCE: "schedule_service"
     volumes:
       - auth_data:/app/auth_service/data
       - audit_data:/app/data
@@ -167,6 +175,25 @@ services:
     networks:
       - stss-net
 
+  schedule_seed:
+    image: ${SCHEDULE_IMAGE:-ghcr.io/uppi7/zjuse-schedule:latest}
+    container_name: stss-schedule-seed
+    profiles: ["seed"]
+    command: ["python", "-m", "scripts.seed_integration"]
+    environment:
+      MYSQL_HOST: schedule_mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: root
+      MYSQL_PASSWORD: "${SCHEDULE_MYSQL_PASSWORD:-rootpassword}"
+      MYSQL_DB: "${SCHEDULE_MYSQL_DB:-course_arrange}"
+      REDIS_HOST: schedule_redis
+      REDIS_PORT: "6379"
+    depends_on:
+      schedule_mysql:
+        condition: service_healthy
+    networks:
+      - stss-net
+
   # ── SPA Front-end (optional, dev profile) ──────────────────────
   frontend-dev:
     image: node:22-alpine
@@ -178,6 +205,99 @@ services:
       - "5173:5173"
     volumes:
       - ${FRONTEND_PATH:-./frontend}:/app
+    networks:
+      - stss-net
+
+  # ── Schedule Service ───────────────────────────────────────────
+  schedule_service:
+    image: ${SCHEDULE_IMAGE:-ghcr.io/uppi7/zjuse-schedule:latest}
+    container_name: stss-schedule-api
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8003"]
+    environment:
+      MYSQL_HOST: schedule_mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: root
+      MYSQL_PASSWORD: "${SCHEDULE_MYSQL_PASSWORD:-rootpassword}"
+      MYSQL_DB: "${SCHEDULE_MYSQL_DB:-course_arrange}"
+      REDIS_HOST: schedule_redis
+      REDIS_PORT: "6379"
+      GATEWAY_BASE_URL: "http://gateway:${GATEWAY_PORT:-8000}"
+      SCHEDULE_SERVICE_CLIENT_ID: "${SCHEDULE_SERVICE_CLIENT_ID:-schedule_service}"
+      SCHEDULE_SERVICE_CLIENT_SECRET: "${SCHEDULE_SERVICE_CLIENT_SECRET:-change-me-schedule-service-secret}"
+      ALLOW_UPSTREAM_STUB_FALLBACK: "false"
+    depends_on:
+      schedule_mysql:
+        condition: service_healthy
+      schedule_redis:
+        condition: service_healthy
+    expose:
+      - "8003"
+    restart: unless-stopped
+    networks:
+      - stss-net
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8003/health')\""]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  schedule_worker:
+    image: ${SCHEDULE_IMAGE:-ghcr.io/uppi7/zjuse-schedule:latest}
+    container_name: stss-schedule-worker
+    command: ["celery", "-A", "app.tasks.celery_app.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    environment:
+      MYSQL_HOST: schedule_mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: root
+      MYSQL_PASSWORD: "${SCHEDULE_MYSQL_PASSWORD:-rootpassword}"
+      MYSQL_DB: "${SCHEDULE_MYSQL_DB:-course_arrange}"
+      REDIS_HOST: schedule_redis
+      REDIS_PORT: "6379"
+      GATEWAY_BASE_URL: "http://gateway:${GATEWAY_PORT:-8000}"
+      SCHEDULE_SERVICE_CLIENT_ID: "${SCHEDULE_SERVICE_CLIENT_ID:-schedule_service}"
+      SCHEDULE_SERVICE_CLIENT_SECRET: "${SCHEDULE_SERVICE_CLIENT_SECRET:-change-me-schedule-service-secret}"
+      ALLOW_UPSTREAM_STUB_FALLBACK: "false"
+    depends_on:
+      schedule_service:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+      schedule_redis:
+        condition: service_healthy
+      schedule_mysql:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - stss-net
+
+  schedule_mysql:
+    image: mysql:8.0
+    container_name: stss-schedule-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: "${SCHEDULE_MYSQL_PASSWORD:-rootpassword}"
+      MYSQL_DATABASE: "${SCHEDULE_MYSQL_DB:-course_arrange}"
+    volumes:
+      - schedule_mysql_data:/var/lib/mysql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - stss-net
+
+  schedule_redis:
+    image: redis:7-alpine
+    container_name: stss-schedule-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     networks:
       - stss-net
 
@@ -195,16 +315,6 @@ services:
   # The placeholder services expose their port to the Docker
   # network only — they are NOT published to the host.
   # ═══════════════════════════════════════════════════════════════
-
-  schedule_service:
-    image: alpine:3.20
-    container_name: stss-schedule-placeholder
-    profiles: ["backend-placeholders"]
-    command: ["sh", "-c", "echo 'schedule_service placeholder — replace with real backend'; sleep infinity"]
-    expose:
-      - "8003"
-    networks:
-      - stss-net
 
   course-selection-api:
     image: alpine:3.20
@@ -255,3 +365,4 @@ volumes:
   info_data:
   uploads:
   audit_data:
+  schedule_mysql_data:

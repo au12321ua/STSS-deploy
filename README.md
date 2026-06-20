@@ -37,8 +37,8 @@ cp .env.example .env
 # 3. 一键启动（从 GHCR 拉取全部镜像）
 docker compose up -d
 
-# 4. 首次使用时初始化数据（角色、权限、管理员用户）
-docker compose --profile seed up seed
+# 4. 首次使用时初始化数据（角色、权限、管理员用户、Schedule 教室）
+docker compose --profile seed up seed schedule_seed
 
 # 5. 验证
 curl http://localhost:8000/api/v1/health
@@ -50,9 +50,9 @@ curl http://localhost:8000/api/v1/health
 
 ```bash
 cp docker-compose.override.yml.example docker-compose.override.yml
-docker compose build auth_service info_service seed
+docker compose build auth_service info_service seed schedule_service schedule_worker schedule_seed
 docker compose up -d
-docker compose --profile seed up seed
+docker compose --profile seed up seed schedule_seed
 ```
 
 ### 启动占位服务
@@ -83,6 +83,11 @@ docker compose --profile backend-placeholders up -d
 | `GRADE_SERVICE_URL` | `grade_service:8007` | 成绩上游地址 |
 | `TOKEN_SECRET_KEY` | — | JWT 签名密钥，auth 和 info 必须一致 |
 | `INFO_SERVICE_CLIENT_SECRET` | — | Info 调 Auth 的凭据 |
+| `SCHEDULE_SERVICE_CLIENT_ID` | `schedule_service` | Schedule 服务账号 ID |
+| `SCHEDULE_SERVICE_CLIENT_SECRET` | — | Schedule 调 Auth 的凭据 |
+| `SCHEDULE_IMAGE` | `ghcr.io/uppi7/zjuse-schedule:latest` | Schedule API/Worker/seed 镜像 |
+| `SCHEDULE_MYSQL_PASSWORD` | `rootpassword` | Schedule MySQL root 密码 |
+| `SCHEDULE_MYSQL_DB` | `course_arrange` | Schedule 数据库名 |
 | `ENV` | `development` | 运行环境 |
 | `LOG_LEVEL` | `DEBUG` | 日志级别 |
 
@@ -92,6 +97,7 @@ docker compose --profile backend-placeholders up -d
 GATEWAY_CLIENT_SECRET ────────────► auth_service: SERVICE_CLIENT_GATEWAY_SECRET
 INFO_SERVICE_CLIENT_SECRET ───┬──► auth_service: SERVICE_CLIENT_INFO_SERVICE_SECRET
                               └──► info_service:  AUTH_SERVICE_CLIENT_SECRET
+SCHEDULE_SERVICE_CLIENT_SECRET ─► auth_service: SERVICE_CLIENT_SCHEDULE_SERVICE_SECRET
 TOKEN_SECRET_KEY ───────┬────────► auth_service: TOKEN_SECRET_KEY
                         └────────► info_service:  TOKEN_SECRET_KEY
 ```
@@ -104,10 +110,10 @@ TOKEN_SECRET_KEY ───────┬────────► auth_servic
 
 | Profile | 说明 |
 |---|---|
-| （默认） | 启动 gateway + auth_service + info_service |
-| `seed` | 一次性初始化角色、权限、管理员用户 |
+| （默认） | 启动 gateway + auth_service + info_service + schedule_service + schedule_worker + schedule_mysql + schedule_redis |
+| `seed` | 一次性初始化角色、权限、管理员用户、Schedule 教室数据 |
 | `dev` | 附加 SPA 前端开发服务器（Vite，端口 5173） |
-| `backend-placeholders` | 启动占位容器，让未就绪的服务名可被网关 DNS 解析 |
+| `backend-placeholders` | 启动未接入业务的占位容器，让服务名可被网关 DNS 解析 |
 
 ---
 
