@@ -92,10 +92,11 @@ services:
       SERVICE_CLIENT_SCHEDULE_SERVICE_SCOPE:    "offering:read course:read"
       SERVICE_CLIENT_SCHEDULE_SERVICE_AUDIENCE: "schedule_service"
 
-      # Course Selection Service client — calls Info Service with a service token
+      # Course Selection Service client — calls Info/Schedule with a service token.
+      # Latest Auth resolves service-token permissions from DB role SERVICE;
+      # SERVICE_CLIENT_*_SCOPE is ignored, so do not configure scopes here.
       SERVICE_CLIENT_COURSE_SELECTION_SERVICE_ID:       "${COURSE_SELECTION_SERVICE_CLIENT_ID:-course_selection_service}"
       SERVICE_CLIENT_COURSE_SELECTION_SERVICE_SECRET:   "${COURSE_SELECTION_SERVICE_CLIENT_SECRET:-change-me-course-selection-service-secret}"
-      SERVICE_CLIENT_COURSE_SELECTION_SERVICE_SCOPE:    "user:read course:read data-provision:read offering:read schedule:read classroom:read"
       SERVICE_CLIENT_COURSE_SELECTION_SERVICE_AUDIENCE: "course_selection_service"
     volumes:
       - auth_data:/app/auth_service/data

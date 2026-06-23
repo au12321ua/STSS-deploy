@@ -113,6 +113,20 @@ TOKEN_SECRET_KEY ───────┬────────► auth_servic
 
 `.env` 中设置一次即可，compose 文件已通过变量引用保证一致性。
 
+### Service Token 权限
+
+最新版 `group1-base` 中，service token 的权限来自 Auth 数据库里的 `SERVICE` 角色，不再由
+`SERVICE_CLIENT_*_SCOPE` 环境变量授权。Course Selection 需要该角色至少具备：
+
+```
+data-provision:read course:read offering:read schedule:read classroom:read
+```
+
+首次初始化时请运行 `docker compose --profile seed up seed schedule_seed`。如果本地已经有旧的
+`auth_data` 卷，旧 seed 可能没有写入 `SERVICE` 角色或上述权限；此时需要重置/重新 seed
+Auth 数据库，或在 Auth DB 中手动补齐 `SERVICE` 角色权限。单独添加
+`SERVICE_CLIENT_COURSE_SELECTION_SERVICE_SCOPE` 不会解决权限问题。
+
 ---
 
 ## Profiles
