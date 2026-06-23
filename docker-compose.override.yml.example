@@ -10,10 +10,11 @@
 #     ../group1-base/info_service/Dockerfile
 #     ../group1-base/scripts/Dockerfile (seed)
 #     ../schedule/Dockerfile
+#     ../Smart-Class-Selection-backend/deploy/Dockerfile
 #
 # Usage:
 #   cp docker-compose.override.yml.example docker-compose.override.yml
-#   docker compose build auth_service info_service seed schedule_service schedule_worker schedule_seed
+#   docker compose build auth_service info_service seed schedule_service schedule_worker schedule_seed course-selection-api course-selection-worker
 #   docker compose up -d
 #   docker compose --profile seed up seed schedule_seed
 #
@@ -67,3 +68,13 @@ services:
   schedule_redis:
     ports:
       - "${SCHEDULE_REDIS_PORT:-6382}:6379"
+
+  course-selection-api:
+    build:
+      context: ../Smart-Class-Selection-backend
+      dockerfile: deploy/Dockerfile
+
+  course-selection-worker:
+    build:
+      context: ../Smart-Class-Selection-backend
+      dockerfile: deploy/Dockerfile

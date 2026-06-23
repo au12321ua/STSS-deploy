@@ -20,7 +20,7 @@
 services:
   # ── Gateway ────────────────────────────────────────────────────
   gateway:
-    image: ${GATEWAY_IMAGE:-ghcr.io/au12321ua/stss-gateway:latest}
+    image: ${GATEWAY_IMAGE:-ghcr.io/au12321ua/stss-gateway:c3585b4}
     container_name: stss-gateway
     ports:
       - "${GATEWAY_PORT:-8000}:${GATEWAY_PORT:-8000}"
@@ -43,6 +43,8 @@ services:
       info_service:
         condition: service_healthy
       schedule_service:
+        condition: service_healthy
+      course-selection-api:
         condition: service_healthy
     restart: unless-stopped
     networks:
@@ -89,6 +91,12 @@ services:
       SERVICE_CLIENT_SCHEDULE_SERVICE_SECRET:   "${SCHEDULE_SERVICE_CLIENT_SECRET:-change-me-schedule-service-secret}"
       SERVICE_CLIENT_SCHEDULE_SERVICE_SCOPE:    "offering:read course:read"
       SERVICE_CLIENT_SCHEDULE_SERVICE_AUDIENCE: "schedule_service"
+
+      # Course Selection Service client — calls Info Service with a service token
+      SERVICE_CLIENT_COURSE_SELECTION_SERVICE_ID:       "${COURSE_SELECTION_SERVICE_CLIENT_ID:-course_selection_service}"
+      SERVICE_CLIENT_COURSE_SELECTION_SERVICE_SECRET:   "${COURSE_SELECTION_SERVICE_CLIENT_SECRET:-change-me-course-selection-service-secret}"
+      SERVICE_CLIENT_COURSE_SELECTION_SERVICE_SCOPE:    "user:read course:read data-provision:read offering:read schedule:read classroom:read"
+      SERVICE_CLIENT_COURSE_SELECTION_SERVICE_AUDIENCE: "course_selection_service"
     volumes:
       - auth_data:/app/auth_service/data
       - audit_data:/app/data
@@ -301,6 +309,128 @@ services:
     networks:
       - stss-net
 
+  # ── Course Selection Service ───────────────────────────────────
+  course-selection-api:
+    image: ${COURSE_SELECTION_IMAGE:-ghcr.io/au12321ua/stss-course-selection:latest}
+    container_name: stss-course-selection-api
+    environment:
+      MODE: api
+      SERVICE_PORT: "8004"
+      SERVICE_NAME: course-selection
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      AUTO_MIGRATE: "true"
+      PG_DSN: "postgres://cs_user:${COURSE_SELECTION_PG_PASSWORD:-cs_pwd}@course-selection-pg:5432/${COURSE_SELECTION_PG_DB:-course_selection}"
+      REDIS_URL: "redis://course-selection-redis:6379/0"
+      RMQ_URL: "amqp://${COURSE_SELECTION_RABBITMQ_USER:-stss}:${COURSE_SELECTION_RABBITMQ_PASSWORD:-stss}@rabbitmq:5672/"
+      INFO_SERVICE_BASE_URL: "http://gateway:${GATEWAY_PORT:-8000}"
+      SCHEDULE_SERVICE_BASE_URL: "http://gateway:${GATEWAY_PORT:-8000}"
+      AUTH_SERVICE_BASE_URL: "http://auth_service:8001"
+      COURSE_SELECTION_SERVICE_CLIENT_ID: "${COURSE_SELECTION_SERVICE_CLIENT_ID:-course_selection_service}"
+      COURSE_SELECTION_SERVICE_CLIENT_SECRET: "${COURSE_SELECTION_SERVICE_CLIENT_SECRET:-change-me-course-selection-service-secret}"
+      DEV_CORS_ORIGIN_REGEX: ""
+    depends_on:
+      auth_service:
+        condition: service_healthy
+      info_service:
+        condition: service_healthy
+      schedule_service:
+        condition: service_healthy
+      course-selection-pg:
+        condition: service_healthy
+      course-selection-redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    expose:
+      - "8004"
+    restart: unless-stopped
+    networks:
+      - stss-net
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8004/api/v1/health')\""]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+
+  course-selection-worker:
+    image: ${COURSE_SELECTION_IMAGE:-ghcr.io/au12321ua/stss-course-selection:latest}
+    container_name: stss-course-selection-worker
+    environment:
+      MODE: worker
+      SERVICE_NAME: course-selection
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      AUTO_MIGRATE: "true"
+      PG_DSN: "postgres://cs_user:${COURSE_SELECTION_PG_PASSWORD:-cs_pwd}@course-selection-pg:5432/${COURSE_SELECTION_PG_DB:-course_selection}"
+      REDIS_URL: "redis://course-selection-redis:6379/0"
+      RMQ_URL: "amqp://${COURSE_SELECTION_RABBITMQ_USER:-stss}:${COURSE_SELECTION_RABBITMQ_PASSWORD:-stss}@rabbitmq:5672/"
+      INFO_SERVICE_BASE_URL: "http://gateway:${GATEWAY_PORT:-8000}"
+      SCHEDULE_SERVICE_BASE_URL: "http://gateway:${GATEWAY_PORT:-8000}"
+      AUTH_SERVICE_BASE_URL: "http://auth_service:8001"
+      COURSE_SELECTION_SERVICE_CLIENT_ID: "${COURSE_SELECTION_SERVICE_CLIENT_ID:-course_selection_service}"
+      COURSE_SELECTION_SERVICE_CLIENT_SECRET: "${COURSE_SELECTION_SERVICE_CLIENT_SECRET:-change-me-course-selection-service-secret}"
+      DEV_CORS_ORIGIN_REGEX: ""
+    depends_on:
+      course-selection-api:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - stss-net
+
+  course-selection-pg:
+    image: postgres:16-alpine
+    container_name: stss-course-selection-pg
+    environment:
+      POSTGRES_USER: cs_user
+      POSTGRES_PASSWORD: "${COURSE_SELECTION_PG_PASSWORD:-cs_pwd}"
+      POSTGRES_DB: "${COURSE_SELECTION_PG_DB:-course_selection}"
+    volumes:
+      - course_selection_pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cs_user -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - stss-net
+
+  course-selection-redis:
+    image: redis:7-alpine
+    container_name: stss-course-selection-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - course_selection_redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - stss-net
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: stss-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: "${COURSE_SELECTION_RABBITMQ_USER:-stss}"
+      RABBITMQ_DEFAULT_PASS: "${COURSE_SELECTION_RABBITMQ_PASSWORD:-stss}"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - stss-net
+
   # ═══════════════════════════════════════════════════════════════
   # BUSINESS SERVICE PLACEHOLDERS
   #
@@ -315,16 +445,6 @@ services:
   # The placeholder services expose their port to the Docker
   # network only — they are NOT published to the host.
   # ═══════════════════════════════════════════════════════════════
-
-  course-selection-api:
-    image: alpine:3.20
-    container_name: stss-course-selection-placeholder
-    profiles: ["backend-placeholders"]
-    command: ["sh", "-c", "echo 'course-selection-api placeholder — replace with real backend'; sleep infinity"]
-    expose:
-      - "8004"
-    networks:
-      - stss-net
 
   forum_service:
     image: alpine:3.20
@@ -366,3 +486,6 @@ volumes:
   uploads:
   audit_data:
   schedule_mysql_data:
+  course_selection_pg_data:
+  course_selection_redis_data:
+  rabbitmq_data:

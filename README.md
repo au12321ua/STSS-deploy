@@ -50,7 +50,7 @@ curl http://localhost:8000/api/v1/health
 
 ```bash
 cp docker-compose.override.yml.example docker-compose.override.yml
-docker compose build auth_service info_service seed schedule_service schedule_worker schedule_seed
+docker compose build auth_service info_service seed schedule_service schedule_worker schedule_seed course-selection-api course-selection-worker
 docker compose up -d
 docker compose --profile seed up seed schedule_seed
 ```
@@ -70,6 +70,7 @@ docker compose --profile backend-placeholders up -d
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `GATEWAY_PORT` | `8000` | 网关监听端口 |
+| `GATEWAY_IMAGE` | `ghcr.io/au12321ua/stss-gateway:c3585b4` | Gateway 镜像，包含 `/api/v1/classrooms` 路由 |
 | `GATEWAY_CLIENT_ID` | `gateway` | 网关服务账号 |
 | `GATEWAY_CLIENT_SECRET` | `change-me-gateway-secret` | 网关服务账号密钥 |
 | `CORS_ORIGINS` | `http://localhost:5173,…` | 允许的 CORS 域名 |
@@ -85,9 +86,16 @@ docker compose --profile backend-placeholders up -d
 | `INFO_SERVICE_CLIENT_SECRET` | — | Info 调 Auth 的凭据 |
 | `SCHEDULE_SERVICE_CLIENT_ID` | `schedule_service` | Schedule 服务账号 ID |
 | `SCHEDULE_SERVICE_CLIENT_SECRET` | — | Schedule 调 Auth 的凭据 |
+| `COURSE_SELECTION_SERVICE_CLIENT_ID` | `course_selection_service` | Course Selection 服务账号 ID |
+| `COURSE_SELECTION_SERVICE_CLIENT_SECRET` | — | Course Selection 调 Auth 后访问 Info/Schedule 的凭据 |
 | `SCHEDULE_IMAGE` | `ghcr.io/uppi7/zjuse-schedule:latest` | Schedule API/Worker/seed 镜像 |
 | `SCHEDULE_MYSQL_PASSWORD` | `rootpassword` | Schedule MySQL root 密码 |
 | `SCHEDULE_MYSQL_DB` | `course_arrange` | Schedule 数据库名 |
+| `COURSE_SELECTION_IMAGE` | `ghcr.io/au12321ua/stss-course-selection:latest` | Course Selection API/Worker 镜像 |
+| `COURSE_SELECTION_PG_PASSWORD` | `cs_pwd` | Course Selection PostgreSQL 密码 |
+| `COURSE_SELECTION_PG_DB` | `course_selection` | Course Selection 数据库名 |
+| `COURSE_SELECTION_RABBITMQ_USER` | `stss` | RabbitMQ 用户名 |
+| `COURSE_SELECTION_RABBITMQ_PASSWORD` | `stss` | RabbitMQ 密码 |
 | `ENV` | `development` | 运行环境 |
 | `LOG_LEVEL` | `DEBUG` | 日志级别 |
 
@@ -98,6 +106,7 @@ GATEWAY_CLIENT_SECRET ────────────► auth_service: SERV
 INFO_SERVICE_CLIENT_SECRET ───┬──► auth_service: SERVICE_CLIENT_INFO_SERVICE_SECRET
                               └──► info_service:  AUTH_SERVICE_CLIENT_SECRET
 SCHEDULE_SERVICE_CLIENT_SECRET ─► auth_service: SERVICE_CLIENT_SCHEDULE_SERVICE_SECRET
+COURSE_SELECTION_SERVICE_CLIENT_SECRET ─► auth_service: SERVICE_CLIENT_COURSE_SELECTION_SERVICE_SECRET
 TOKEN_SECRET_KEY ───────┬────────► auth_service: TOKEN_SECRET_KEY
                         └────────► info_service:  TOKEN_SECRET_KEY
 ```
@@ -110,7 +119,7 @@ TOKEN_SECRET_KEY ───────┬────────► auth_servic
 
 | Profile | 说明 |
 |---|---|
-| （默认） | 启动 gateway + auth_service + info_service + schedule_service + schedule_worker + schedule_mysql + schedule_redis |
+| （默认） | 启动 gateway + auth_service + info_service + schedule_service + schedule_worker + schedule_mysql + schedule_redis + course-selection-api + course-selection-worker + course-selection-pg + course-selection-redis + rabbitmq |
 | `seed` | 一次性初始化角色、权限、管理员用户、Schedule 教室数据 |
 | `dev` | 附加 SPA 前端开发服务器（Vite，端口 5173） |
 | `backend-placeholders` | 启动未接入业务的占位容器，让服务名可被网关 DNS 解析 |
