@@ -91,7 +91,7 @@ docker compose --profile backend-placeholders up -d
 | `SCHEDULE_IMAGE` | `ghcr.io/uppi7/zjuse-schedule:latest` | Schedule API/Worker/seed 镜像 |
 | `SCHEDULE_MYSQL_PASSWORD` | `rootpassword` | Schedule MySQL root 密码 |
 | `SCHEDULE_MYSQL_DB` | `course_arrange` | Schedule 数据库名 |
-| `COURSE_SELECTION_IMAGE` | `ghcr.io/au12321ua/stss-course-selection:latest` | Course Selection API/Worker 镜像 |
+| `COURSE_SELECTION_IMAGE` | `ghcr.io/hhhjyz/stss-course-selection:95b523e` | Course Selection API/Worker 镜像 |
 | `COURSE_SELECTION_PG_PASSWORD` | `cs_pwd` | Course Selection PostgreSQL 密码 |
 | `COURSE_SELECTION_PG_DB` | `course_selection` | Course Selection 数据库名 |
 | `COURSE_SELECTION_RABBITMQ_USER` | `stss` | RabbitMQ 用户名 |

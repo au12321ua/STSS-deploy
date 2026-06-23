@@ -312,7 +312,7 @@ services:
 
   # ── Course Selection Service ───────────────────────────────────
   course-selection-api:
-    image: ${COURSE_SELECTION_IMAGE:-ghcr.io/au12321ua/stss-course-selection:latest}
+    image: ${COURSE_SELECTION_IMAGE:-ghcr.io/hhhjyz/stss-course-selection:95b523e}
     container_name: stss-course-selection-api
     environment:
       MODE: api
@@ -355,7 +355,7 @@ services:
       start_period: 20s
 
   course-selection-worker:
-    image: ${COURSE_SELECTION_IMAGE:-ghcr.io/au12321ua/stss-course-selection:latest}
+    image: ${COURSE_SELECTION_IMAGE:-ghcr.io/hhhjyz/stss-course-selection:95b523e}
     container_name: stss-course-selection-worker
     environment:
       MODE: worker
