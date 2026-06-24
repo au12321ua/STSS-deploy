@@ -11,10 +11,11 @@
 #     ../group1-base/scripts/Dockerfile (seed)
 #     ../schedule/Dockerfile
 #     ../Smart-Class-Selection-backend/deploy/Dockerfile
+#     ../STSS-forum-backend/Dockerfile
 #
 # Usage:
 #   cp docker-compose.override.yml.example docker-compose.override.yml
-#   docker compose build auth_service info_service seed schedule_service schedule_worker schedule_seed course-selection-api course-selection-worker
+#   docker compose build auth_service info_service seed schedule_service schedule_worker schedule_seed course-selection-api course-selection-worker forum_service
 #   docker compose up -d
 #   docker compose --profile seed up seed schedule_seed
 #
@@ -78,3 +79,10 @@ services:
     build:
       context: ../Smart-Class-Selection-backend
       dockerfile: deploy/Dockerfile
+
+  forum_service:
+    build:
+      context: ../STSS-forum-backend
+      dockerfile: Dockerfile
+    ports:
+      - "${FORUM_API_PORT:-8005}:8005"

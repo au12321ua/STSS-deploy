@@ -46,6 +46,8 @@ services:
         condition: service_healthy
       course-selection-api:
         condition: service_healthy
+      forum_service:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - stss-net
@@ -432,6 +434,39 @@ services:
     networks:
       - stss-net
 
+  # ── Forum Service ──────────────────────────────────────────────
+  forum_service:
+    image: ${FORUM_IMAGE:-ghcr.io/au12321ua/stss-forum:latest}
+    container_name: stss-forum
+    environment:
+      ENV: "${ENV:-development}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      FORUM_PORT: "8005"
+      DATABASE_URL: "sqlite:///./data/forum.db"
+      UPLOAD_DIR: "/app/uploads"
+      PUBLIC_UPLOAD_PREFIX: "/api/v1/forum/uploads"
+      LEGACY_UPLOAD_PREFIX: "/uploads"
+      ENABLE_CORS: "false"
+      SKIP_EXTERNAL_CHECKS: "${FORUM_SKIP_EXTERNAL_CHECKS:-true}"
+      INFO_SERVICE_URL: "http://info_service:8002"
+      COURSE_SELECTION_SERVICE_URL: "http://course-selection-api:8004"
+      SCORE_SERVICE_URL: "http://grade_service:8007"
+      INTERNAL_TOKEN: "${FORUM_INTERNAL_TOKEN:-dev-internal-token}"
+    volumes:
+      - forum_data:/app/data
+      - forum_uploads:/app/uploads
+    expose:
+      - "8005"
+    restart: unless-stopped
+    networks:
+      - stss-net
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8005/api/v1/health')\""]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
   # ═══════════════════════════════════════════════════════════════
   # BUSINESS SERVICE PLACEHOLDERS
   #
@@ -446,16 +481,6 @@ services:
   # The placeholder services expose their port to the Docker
   # network only — they are NOT published to the host.
   # ═══════════════════════════════════════════════════════════════
-
-  forum_service:
-    image: alpine:3.20
-    container_name: stss-forum-placeholder
-    profiles: ["backend-placeholders"]
-    command: ["sh", "-c", "echo 'forum_service placeholder — replace with real backend'; sleep infinity"]
-    expose:
-      - "8005"
-    networks:
-      - stss-net
 
   online_test_service:
     image: alpine:3.20
@@ -490,3 +515,5 @@ volumes:
   course_selection_pg_data:
   course_selection_redis_data:
   rabbitmq_data:
+  forum_data:
+  forum_uploads:
