@@ -18,7 +18,23 @@
 #   docker compose --profile backend-placeholders up -d  # stub services
 # ═══════════════════════════════════════════════════════════════════
 services:
-  # ── Front-end ──────────────────────
+  # ── Front-end (production) ────────────────────────────────────────
+  frontend:
+    image: ${FRONTEND_IMAGE:-ghcr.io/au12321ua/stss-frontend:latest}
+    container_name: stss-frontend
+    expose:
+      - "80"
+    restart: unless-stopped
+    networks:
+      - stss-net
+    healthcheck:
+      test:     ["CMD-SHELL", "wget -qO- http://localhost/ || exit 1"]
+      interval: 30s
+      timeout:  5s
+      retries:  3
+      start_period: 5s
+
+  # ── Front-end (dev) ─────────────────────────────────────────────
   frontend-dev:
     image: node:22-alpine
     container_name: stss-frontend-dev
@@ -46,6 +62,7 @@ services:
       FORUM_SERVICE_URL:     "${FORUM_SERVICE_URL:-forum_service:8005}"
       ONLINE_TEST_SERVICE_URL: "${ONLINE_TEST_SERVICE_URL:-online_test_service:8006}"
       GRADE_SERVICE_URL:     "${GRADE_SERVICE_URL:-grade_service:8007}"
+      FRONTEND_URL:          "${FRONTEND_URL:-frontend:80}"
       GATEWAY_PORT:          "${GATEWAY_PORT:-8000}"
       CORS_ORIGINS:          "${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000}"
       RATE_LIMIT_LOGIN:      "${RATE_LIMIT_LOGIN:-10r/m}"
@@ -61,6 +78,8 @@ services:
       course-selection-api:
         condition: service_healthy
       forum_service:
+        condition: service_healthy
+      frontend:
         condition: service_healthy
     restart: unless-stopped
     networks:

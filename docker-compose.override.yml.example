@@ -17,10 +17,11 @@
 #     ../STSS-Online-Testing/go/logger/Dockerfile
 #     ../STSS-Online-Testing/go/proctor/Dockerfile.multi
 #     ../SE-Group6/Dockerfile
+#     ../SSTS-frontend/Dockerfile
 #
 # Usage:
 #   cp docker-compose.override.yml.example docker-compose.override.yml
-#   docker compose --profile local-build build gateway auth_service info_service seed schedule_service schedule_worker schedule_seed course-selection-api course-selection-worker forum_service online_test_logger online_test_service online_test_proctor_controller online_test_proctor_image grade_service
+#   docker compose --profile local-build build gateway auth_service info_service seed schedule_service schedule_worker schedule_seed course-selection-api course-selection-worker forum_service online_test_logger online_test_service online_test_proctor_controller online_test_proctor_image grade_service frontend
 #   docker compose up -d
 #   docker compose --profile seed up seed schedule_seed
 #
@@ -161,6 +162,11 @@ services:
       context: ../SE-Group6
       dockerfile: Dockerfile
     image: stss-grade:local
+
+  frontend:
+    build:
+      context: ../SSTS-frontend
+    image: stss-frontend:local
 
 volumes:
   forum_data:
