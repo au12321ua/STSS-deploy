@@ -468,14 +468,27 @@ services:
       - stss-net
 
   grade_service:
-    image: alpine:3.20
-    container_name: stss-grade-placeholder
-    profiles: ["backend-placeholders"]
-    command: ["sh", "-c", "echo 'grade_service placeholder — replace with real backend'; sleep infinity"]
+    image: ghcr.io/sicrete/stss-grade:latest
+    container_name: stss-grade
     expose:
       - "8007"
+    environment:
+      DATABASE_URL: "sqlite:///./grade.db"
+      BASE_INFO_API_URL: "http://info_service:8002"
+      COURSE_API_URL: "http://course-selection-api:8004"
+      EXAM_API_URL: "http://online_test_service:8006"
+      FORUM_API_URL: "http://forum_service:8005"
+      GRADE_DEV_MOCK_EXTERNAL: "${GRADE_DEV_MOCK_EXTERNAL:-true}"
+    volumes:
+      - grade_data:/app/data
     networks:
       - stss-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8007/api/v1/health')"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
 networks:
   stss-net:
@@ -490,3 +503,5 @@ volumes:
   course_selection_pg_data:
   course_selection_redis_data:
   rabbitmq_data:
+  grade_data:
+
