@@ -491,7 +491,7 @@ services:
     ports:
       - "50051:50051"
     volumes:
-      - logger_logs:/log/ot
+      - online_test_logger_logs:/log/ot
     networks:
       - stss-net
 
@@ -605,5 +605,5 @@ volumes:
   rabbitmq_data:
   grade_data:
   online_test_mysql_data:
-  logger_logs:
+  online_test_logger_logs:
 
