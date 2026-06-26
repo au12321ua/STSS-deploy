@@ -3,8 +3,23 @@
 STSS 平台的 Docker Compose 部署仓库。编排网关、认证、业务服务，通过
 GHCR 镜像一键拉起全栈。
 
-**网关源码 & 镜像发布**在独立仓库：
-[https://github.com/au12321ua/STSS-gateway](https://github.com/au12321ua/STSS-gateway)
+---
+
+## 子系统仓库
+
+| 子系统 | 仓库地址 | 说明 |
+|---|---|---|
+| **STSS-deploy** | [au12321ua/STSS-deploy](https://github.com/au12321ua/STSS-deploy) | 部署编排（本仓库） |
+| **STSS-gateway** | [au12321ua/STSS-gateway](https://github.com/au12321ua/STSS-gateway) | Nginx 网关，Bearer 令牌校验、路由代理、限流、CORS |
+| **group1-base** | [gau12321ua/group1-base](https://github.com/au12321ua/group1-base) | Auth Service + Info Service + Seed |
+| **zjuse-schedule** | [uppi7/zjuse-schedule](https://github.com/uppi7/zjuse-schedule) | 排课系统 |
+| **Smart-Class-Selection-backend** | [hhhjyz/Smart-Class-Selection-backend](https://github.com/hhhjyz/Smart-Class-Selection-backend) | 选课系统 |
+| **STSS-Online-Testing** | [cpmores/STSS-Online-Testing.git](https://github.com/cpmores/STSS-Online-Testing.git) | 在线测试系统 |
+| **STSS-forum-backend** | [zheng-cao04/STSS-forum-backend](https://github.com/zheng-cao04/STSS-forum-backend)| 论坛服务 |
+| **SE-Group6** | [Sicrete/SE-Group6](https://github.com/Sicrete/SE-Group6) | 成绩服务 |
+| **STSS-frontend** | [Aparecium77/SSTS-frontend](https://github.com/Aparecium77/SSTS-frontend) | SPA 前端（Vite + 端口 5173） |
+
+> 各服务的 GHCR 镜像地址及本地构建覆盖详见 [docker-compose.yml](docker-compose.yml) 和 [docker-compose.override.yml.example](docker-compose.override.yml.example)。
 
 ---
 
@@ -101,6 +116,15 @@ docker compose --profile backend-placeholders up -d
 | `FORUM_INTERNAL_TOKEN` | `dev-internal-token` | Forum 内部服务调用 token |
 | `ENV` | `development` | 运行环境 |
 | `LOG_LEVEL` | `DEBUG` | 日志级别 |
+| `GRADE_DEV_MOCK_EXTERNAL` | `true` | Grade 模拟外部 API（开发用，避免依赖所有服务） |
+| `AUTH_SERVICE_IMAGE` | `ghcr.io/au12321ua/stss-auth:latest` | Auth Service 镜像 |
+| `INFO_SERVICE_IMAGE` | `ghcr.io/au12321ua/stss-info:latest` | Info Service 镜像 |
+| `SEED_IMAGE` | `ghcr.io/au12321ua/stss-seed:latest` | Seed 一次性数据初始化镜像 |
+| `FRONTEND_PATH` | `./frontend` | SPA 前端源码目录（dev profile） |
+| `INTERNAL_TOKEN` | `dev-internal-token` | Forum 内部令牌（override 用，与 FORUM_INTERNAL_TOKEN 值相同） |
+| `SCHEDULE_API_PORT` | `8003` | Schedule API 宿主机调试端口（override only） |
+| `SCHEDULE_MYSQL_PORT` | `3309` | Schedule MySQL 宿主机调试端口（override only） |
+| `SCHEDULE_REDIS_PORT` | `6382` | Schedule Redis 宿主机调试端口（override only） |
 
 ### 凭据一致性
 

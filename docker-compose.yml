@@ -18,6 +18,20 @@
 #   docker compose --profile backend-placeholders up -d  # stub services
 # ═══════════════════════════════════════════════════════════════════
 services:
+  # ── Front-end ──────────────────────
+  frontend-dev:
+    image: node:22-alpine
+    container_name: stss-frontend-dev
+    profiles: ["dev"]
+    working_dir: /app
+    command: npx vite --host 0.0.0.0 --port 5173
+    ports:
+      - "5173:5173"
+    volumes:
+      - ${FRONTEND_PATH:-./frontend}:/app
+    networks:
+      - stss-net
+
   # ── Gateway ────────────────────────────────────────────────────
   gateway:
     image: ${GATEWAY_IMAGE:-ghcr.io/au12321ua/stss-gateway:c3585b4}
@@ -202,20 +216,6 @@ services:
     depends_on:
       schedule_mysql:
         condition: service_healthy
-    networks:
-      - stss-net
-
-  # ── SPA Front-end (optional, dev profile) ──────────────────────
-  frontend-dev:
-    image: node:22-alpine
-    container_name: stss-frontend-dev
-    profiles: ["dev"]
-    working_dir: /app
-    command: npx vite --host 0.0.0.0 --port 5173
-    ports:
-      - "5173:5173"
-    volumes:
-      - ${FRONTEND_PATH:-./frontend}:/app
     networks:
       - stss-net
 
@@ -467,21 +467,6 @@ services:
       retries: 5
       start_period: 10s
 
-  # ═══════════════════════════════════════════════════════════════
-  # BUSINESS SERVICE PLACEHOLDERS
-  #
-  # Alpine-based stubs that keep a hostname alive on stss-net so
-  # the gateway's DNS resolver can resolve every upstream at
-  # startup.  Replace each placeholder with the real service
-  # definition when that backend is ready.
-  #
-  # Profile: backend-placeholders
-  #   docker compose --profile backend-placeholders up -d
-  #
-  # The placeholder services expose their port to the Docker
-  # network only — they are NOT published to the host.
-  # ═══════════════════════════════════════════════════════════════
-
   # ── Online Testing ──────────────────────────────────────────────────────────
   # STSS Online Testing: based on https://github.com/cpmores/WisdomWeb
   # images below are uploaded to hub.docker.com
@@ -589,17 +574,7 @@ services:
     networks:
       - stss-net
 
-  # ── Forum ──────────────────────────────────────────────────────────
-
-  forum_service:
-    image: alpine:3.20
-    container_name: stss-forum-placeholder
-    profiles: ["backend-placeholders"]
-    command: ["sh", "-c", "echo 'forum_service placeholder — replace with real backend'; sleep infinity"]
-    expose:
-      - "8005"
-    networks:
-      - stss-net
+  # ── Grade ──────────────────────────────────────────────────────────
 
   grade_service:
     image: ghcr.io/sicrete/stss-grade:latest
