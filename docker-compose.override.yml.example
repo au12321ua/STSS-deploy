@@ -9,13 +9,18 @@
 #     ../group1-base/auth_service/Dockerfile
 #     ../group1-base/info_service/Dockerfile
 #     ../group1-base/scripts/Dockerfile (seed)
-#     ../schedule/Dockerfile
+#     ../STSS-gateway/Dockerfile
+#     ../zjuse-schedule/Dockerfile
 #     ../Smart-Class-Selection-backend/deploy/Dockerfile
 #     ../STSS-forum-backend/Dockerfile
+#     ../STSS-Online-Testing/java/Dockerfile
+#     ../STSS-Online-Testing/go/logger/Dockerfile
+#     ../STSS-Online-Testing/go/proctor/Dockerfile.multi
+#     ../SE-Group6/Dockerfile
 #
 # Usage:
 #   cp docker-compose.override.yml.example docker-compose.override.yml
-#   docker compose build auth_service info_service seed schedule_service schedule_worker schedule_seed course-selection-api course-selection-worker forum_service
+#   docker compose --profile local-build build gateway auth_service info_service seed schedule_service schedule_worker schedule_seed course-selection-api course-selection-worker forum_service online_test_logger online_test_service online_test_proctor_controller online_test_proctor_image grade_service
 #   docker compose up -d
 #   docker compose --profile seed up seed schedule_seed
 #
@@ -27,12 +32,12 @@
 #   rm docker-compose.override.yml
 #   docker compose up -d
 #
-# Note: The gateway image is always pulled from GHCR unless you
-# override GATEWAY_IMAGE in .env.  To build the gateway locally,
-# clone https://github.com/au12321ua/STSS-gateway and run
-# docker build there.
-
 services:
+  gateway:
+    build:
+      context: ../STSS-gateway
+    image: stss-gateway:local
+
   auth_service:
     build:
       context: ../group1-base
@@ -50,17 +55,20 @@ services:
 
   schedule_seed:
     build:
-      context: ../schedule
+      context: ../zjuse-schedule
+    image: stss-schedule:local
 
   schedule_service:
     build:
-      context: ../schedule
+      context: ../zjuse-schedule
+    image: stss-schedule:local
     ports:
       - "${SCHEDULE_API_PORT:-8003}:8003"
 
   schedule_worker:
     build:
-      context: ../schedule
+      context: ../zjuse-schedule
+    image: stss-schedule:local
 
   schedule_mysql:
     ports:
@@ -74,15 +82,86 @@ services:
     build:
       context: ../Smart-Class-Selection-backend
       dockerfile: deploy/Dockerfile
+    image: stss-course-selection:local
 
   course-selection-worker:
     build:
       context: ../Smart-Class-Selection-backend
       dockerfile: deploy/Dockerfile
+    image: stss-course-selection:local
 
   forum_service:
     build:
       context: ../STSS-forum-backend
+    image: stss-forum:local
+    container_name: stss-forum
+    profiles: !reset []
+    environment:
+      ENV: "${ENV:-development}"
+      FORUM_PORT: "8005"
+      DATABASE_URL: "sqlite:///./data/forum.db"
+      UPLOAD_DIR: "/app/uploads"
+      PUBLIC_UPLOAD_PREFIX: "/api/v1/forum/uploads"
+      LEGACY_UPLOAD_PREFIX: "/uploads"
+      ENABLE_CORS: "false"
+      INFO_SERVICE_URL: "http://info_service:8002"
+      COURSE_SELECTION_SERVICE_URL: "http://course-selection-api:8004"
+      SCORE_SERVICE_URL: "http://grade_service:8007"
+      INTERNAL_TOKEN: "${INTERNAL_TOKEN:-dev-internal-token}"
+    expose:
+      - "8005"
+    volumes:
+      - forum_data:/app/data
+      - forum_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8005/api/v1/health')"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  online_test_logger:
+    build:
+      context: ../STSS-Online-Testing/go/logger
       dockerfile: Dockerfile
-    ports:
-      - "${FORUM_API_PORT:-8005}:8005"
+    image: stss-online-testing-logger:local
+
+  online_test_service:
+    build:
+      context: ../STSS-Online-Testing
+      dockerfile: java/Dockerfile
+    image: stss-online-testing-service:local
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8006/api/v1/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+
+  online_test_proctor_image:
+    build:
+      context: ../STSS-Online-Testing/go
+      dockerfile: proctor/Dockerfile.multi
+      target: proctor
+    image: stss-online-testing-proctor:local
+    profiles: ["local-build"]
+    entrypoint: ["/bin/sh", "-c", "exit 0"]
+
+  online_test_proctor_controller:
+    build:
+      context: ../STSS-Online-Testing/go
+      dockerfile: proctor/Dockerfile.multi
+      target: controller
+    image: stss-online-testing-controller:local
+    environment:
+      PROCTOR_IMAGE: stss-online-testing-proctor:local
+
+  grade_service:
+    build:
+      context: ../SE-Group6
+      dockerfile: Dockerfile
+    image: stss-grade:local
+
+volumes:
+  forum_data:
+  forum_uploads:

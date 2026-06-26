@@ -482,13 +482,122 @@ services:
   # network only — they are NOT published to the host.
   # ═══════════════════════════════════════════════════════════════
 
+  # ── Online Testing ──────────────────────────────────────────────────────────
+  # STSS Online Testing: based on https://github.com/cpmores/WisdomWeb
+  # images below are uploaded to hub.docker.com
+
+  online_test_mysql:
+    image: docker.m.daocloud.io/library/mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: stss_testing
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - online_test_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - stss-net
+
+  online_test_redis:
+    image: docker.m.daocloud.io/library/redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - stss-net
+
+  online_test_logger:
+    image: cpmores/stss_online_testing_logger:v1.0
+    restart: unless-stopped
+    ports:
+      - "50051:50051"
+    volumes:
+      - online_test_logger_logs:/log/ot
+    networks:
+      - stss-net
+
   online_test_service:
-    image: alpine:3.20
-    container_name: stss-online-test-placeholder
-    profiles: ["backend-placeholders"]
-    command: ["sh", "-c", "echo 'online_test_service placeholder — replace with real backend'; sleep infinity"]
+    image: cpmores/stss_online_testing_service:v1.0
+    restart: unless-stopped
+    depends_on:
+      online_test_mysql:
+        condition: service_healthy
+      online_test_redis:
+        condition: service_healthy
+      online_test_logger:
+        condition: service_started
+    environment:
+      SERVER_PORT: 8006
+      MYSQL_HOST: online_test_mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: stss_testing
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root
+      MYSQL_TIMEZONE: Asia/Shanghai
+      REDIS_HOST: online_test_redis
+      REDIS_PORT: 6379
+      LOGGER_GRPC_HOST: online_test_logger
+      LOGGER_GRPC_PORT: 50051
+      PROCTOR_GRPC_PORT: 50080
+      PROCTOR_GRPC_ENABLED: "true"
+      PROCTOR_CONTROLLER_ENABLED: "true"
+      PROCTOR_CONTROLLER_URL: http://online_test_proctor_controller:8081
+      PROCTOR_REDIS_ENABLED: "true"
     expose:
       - "8006"
+      - "50080"
+    networks:
+      - stss-net
+
+  online_test_proctor_controller:
+    image: cpmores/stss_online_testing_controller:v1.0
+    restart: unless-stopped
+    depends_on:
+      online_test_redis:
+        condition: service_healthy
+      online_test_service:
+        condition: service_started
+      online_test_logger:
+        condition: service_started
+    environment:
+      REDIS_ADDR: online_test_redis:6379
+      JAVA_ADDR: online_test_service:50080
+      LOGGER_ADDR: online_test_logger:50051
+      PROCTOR_IMAGE: cpmores/stss_online_testing_proctor:v1.0
+      PROCTOR_NETWORK: stss-net
+      PROCTOR_PUBLIC_HOST: localhost
+      PROCTOR_WS_SCHEME: ws
+      CONTROLLER_PORT: 8081
+    ports:
+      - "8081:8081"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - stss-net
+
+  # ── Forum ──────────────────────────────────────────────────────────
+
+  forum_service:
+    image: alpine:3.20
+    container_name: stss-forum-placeholder
+    profiles: ["backend-placeholders"]
+    command: ["sh", "-c", "echo 'forum_service placeholder — replace with real backend'; sleep infinity"]
+    expose:
+      - "8005"
     networks:
       - stss-net
 
@@ -517,6 +626,7 @@ services:
 
 networks:
   stss-net:
+    name: stss-net
     driver: bridge
 
 volumes:
@@ -531,4 +641,6 @@ volumes:
   forum_data:
   forum_uploads:
   grade_data:
+  online_test_mysql_data:
+  online_test_logger_logs:
 
