@@ -50,7 +50,7 @@ curl http://localhost:8000/api/v1/health
 
 ```bash
 cp docker-compose.override.yml.example docker-compose.override.yml
-docker compose build auth_service info_service seed schedule_service schedule_worker schedule_seed course-selection-api course-selection-worker
+docker compose --profile local-build build gateway auth_service info_service seed schedule_service schedule_worker schedule_seed course-selection-api course-selection-worker forum_service online_test_logger online_test_service online_test_proctor_controller online_test_proctor_image grade_service
 docker compose up -d
 docker compose --profile seed up seed schedule_seed
 ```
